@@ -18,9 +18,9 @@ pub fn is_hex_string(s: &str) -> bool {
 
 
 
-pub fn _get_rating_from_value(_v:&str) -> i8 {
+pub fn get_rating_from_value(_v:Option<String>) -> i8 {
     for &(k, v) in RATING_MAP.iter() {
-        if _v == v { return k; }
+        if _v == Some(v.to_string()) { return k; }
     }
     0
 }

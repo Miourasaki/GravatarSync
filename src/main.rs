@@ -6,6 +6,8 @@ use image::{ImageFormat};
 use sha1::{Sha1, Digest};
 use sqlx::{MySql, Pool};
 use utils::get_rating;
+use crate::utils::{get_rating_from_value};
+
 mod default;
 mod utils;
 
@@ -53,6 +55,8 @@ async fn get_avatar(req: tide::Request<State>) -> tide::Result {
     let now = chrono::Utc::now();
 
     let id = req.param("md5").unwrap_or("default");
+    let r = req.query::<String>().ok();
+    let rating = get_rating_from_value(r);
     let state = req.state();
 
     if !utils::is_hex_string(id) {
@@ -60,8 +64,9 @@ async fn get_avatar(req: tide::Request<State>) -> tide::Result {
     }
 
     let eid = id.to_lowercase();
-    let obj = sqlx::query_as::<_,Avatar>("SELECT * FROM grsync_query WHERE eid = ? AND rating <= 3 order by rating desc")
+    let obj = sqlx::query_as::<_,Avatar>("SELECT * FROM grsync_query WHERE eid = ? AND rating <= ? order by rating desc")
         .bind(&eid)
+        .bind(rating)
         .fetch_one(&state.conn)
         .await;
 
@@ -80,7 +85,7 @@ async fn get_avatar(req: tide::Request<State>) -> tide::Result {
             .execute(&state.conn)
             .await
         {
-            if let Some(path) = sync_avatar(&eid, 3, None,&state.resource_path,&state.conn).await
+            if let Some(path) = sync_avatar(&eid, rating, None,&state.resource_path,&state.conn).await
                 { buffer = get_buffer(state.resource_path.to_owned() + &path); }
         }
 
@@ -120,7 +125,7 @@ async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>,dir: &st
         .await;
 
     let client = surf::Client::new();
-    let url = format!("https://gravatar.com/avatar/{}?r={}&s={}", eid, get_rating(rating), 512);
+    let url = format!("https://gravatar.com/avatar/{}?r={}&s={}&d=404", eid, get_rating(rating), 512);
     let mut response = client
         .get(url.clone())
         .header("User-Agent", "grsync/0.1.0")
