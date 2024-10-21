@@ -2,6 +2,7 @@ use std::{env};
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
+use std::sync::Arc;
 use image::{ImageFormat};
 use sha1::{Sha1, Digest};
 use sqlx::{MySql, Pool};
@@ -35,7 +36,7 @@ async fn main() -> tide::Result<()> {
 
     let state = State {
         conn: pool,
-        resource_path
+        resource_path,
     };
 
     let mut app = tide::with_state(state);
@@ -48,7 +49,6 @@ async fn main() -> tide::Result<()> {
 
 
 async fn get_avatar(req: tide::Request<State>) -> tide::Result {
-
     let mut response = tide::Response::new(200);
     response.set_content_type("image/avif");
     let mut buffer: Option<Vec<u8>> = None;
@@ -59,45 +59,40 @@ async fn get_avatar(req: tide::Request<State>) -> tide::Result {
     let rating = get_rating_from_value(r);
     let state = req.state();
 
-    if !utils::is_hex_string(id) {
-        return Ok(("What!\n".to_owned() + id).into());
-    }
-
-    let eid = id.to_lowercase();
-    let obj = sqlx::query_as::<_,Avatar>("SELECT * FROM grsync_query WHERE eid = ? AND rating <= ? order by rating desc")
-        .bind(&eid)
-        .bind(rating)
-        .fetch_one(&state.conn)
-        .await;
-
-    if let Ok(data) = obj {
-        if data.last_update < now.timestamp() - 60 * 60 * 24 {
-            async_std::task::spawn(async move {
-                sync_avatar(&data.eid, data.rating, data.sha1.clone(), &state.resource_path,&state.conn).await;
-            });
-        }
-
-        let mut path = None;
-        if let Some(r) = data.resource { path = Some(r); }
-        else if let Some(r) = data.sha1 { path = Some(r + ".avif"); }
-
-        if let Some(p) = path
-            { buffer = get_buffer(state.resource_path.to_owned() + &p); }
-    } else {
-        if let Ok(_) = sqlx::query("INSERT INTO grsync_avatar(eid,rating) VALUE(?, ?)")
+    if utils::is_hex_string(id) {
+        let eid = id.to_lowercase();
+        let obj = sqlx::query_as::<_, Avatar>("SELECT * FROM grsync_query WHERE eid = ? AND rating <= ? order by rating desc")
             .bind(&eid)
             .bind(rating)
-            .execute(&state.conn)
-            .await
-        {
-            if let Some(path) = sync_avatar(&eid, rating, None,&state.resource_path,&state.conn).await
-                { buffer = get_buffer(state.resource_path.to_owned() + &path); }
-        }
+            .fetch_one(&state.conn)
+            .await;
 
+        if let Ok(data) = obj {
+            if data.last_update < now.timestamp() - 60 * 60 * 24 {
+
+                sync_avatar(&data.eid, data.rating, data.sha1.clone(), &state.conn).await;
+            }
+
+            let mut path = None;
+            if let Some(r) = data.resource { path = Some(r); } else if let Some(r) = data.sha1 { path = Some(r + ".avif"); }
+
+            if let Some(p) = path
+            { buffer = get_buffer(state.resource_path.to_owned() + &p); }
+        } else {
+            if let Ok(_) = sqlx::query("INSERT INTO grsync_avatar(eid,rating) VALUE(?, ?)")
+                .bind(&eid)
+                .bind(rating)
+                .execute(&state.conn)
+                .await
+            {
+                if let Some(path) = sync_avatar(&eid, rating, None, &state.conn).await
+                { buffer = get_buffer(state.resource_path.to_owned() + &path); }
+            }
+        }
     }
 
     match buffer {
-        Some(buf) => { response.set_body(buf) },
+        Some(buf) => { response.set_body(buf) }
         None => response.set_body(default::DEFAULT_AVATAR)
     }
     Ok(response)
@@ -112,15 +107,14 @@ fn get_buffer(path: String) -> Option<Vec<u8>> {
         return match file.read_to_end(&mut buf) {
             Ok(_) => Some(buf),
             Err(_) => None
-        }
-
+        };
     }
 
     None
 }
 
 
-async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>,dir: &str,conn: &Pool<MySql>) -> Option<String> {
+async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>, conn: &Pool<MySql>) -> Option<String> {
     println!("now, sync EMD5-{}-{} citizen avatar", eid, get_rating(rating));
     let _ = sqlx::query("UPDATE grsync_avatar SET last_update = ? WHERE eid = ? AND rating = ?")
         .bind(chrono::Utc::now().timestamp())
@@ -135,7 +129,7 @@ async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>,dir: &st
         .get(url.clone())
         .header("User-Agent", "grsync/0.1.0")
         .await.ok()?;
-    let image_bytes= response.body_bytes().await.ok()?;
+    let image_bytes = response.body_bytes().await.ok()?;
 
     let img = image::load_from_memory(&image_bytes).ok()?;
 
@@ -150,15 +144,14 @@ async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>,dir: &st
     let sha1_result = hasher.finalize();
     let sha1_hex = hex::encode(sha1_result);
 
-    if origin_hash == Some(sha1_hex.clone()) {return None}
+    if origin_hash == Some(sha1_hex.clone()) { return None; }
 
-    let obj = sqlx::query_as::<_,Image>("SELECT sha1, resource FROM grsync_resource WHERE sha1 = ?")
+    let obj = sqlx::query_as::<_, Image>("SELECT sha1, resource FROM grsync_resource WHERE sha1 = ?")
         .bind(&sha1_hex)
         .fetch_one(conn)
         .await;
 
     if let Ok(data) = obj {
-
         let _ = sqlx::query("UPDATE grsync_avatar SET resource = ? WHERE eid = ? AND rating = ?")
             .bind(data.sha1.clone())
             .bind(eid)
@@ -173,13 +166,12 @@ async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>,dir: &st
     }
 
 
-    let path = format!("{}/{}.avif", dir,sha1_hex);
+    let path = format!("{:?}/{}.avif", env::var("RESOURCE_PATH"), sha1_hex);
     let output_path = Path::new(&path);
-    let _ = save_img(eid, rating, &sha1_hex, &output_path, avif_bytes, &url,conn).await;
+    let _ = save_img(eid, rating, &sha1_hex, &output_path, avif_bytes, &url, conn).await;
 
     Some(sha1_hex + ".avif")
 }
-
 
 
 #[derive(Debug, sqlx::FromRow)]
@@ -190,7 +182,7 @@ struct Avatar {
     resource: Option<String>,
     size: Option<i32>,
 
-    last_update: i64
+    last_update: i64,
 }
 
 
@@ -201,9 +193,8 @@ struct Image
     resource: Option<String>,
 }
 
-async fn save_img(eid: &str, rating: i8,sha1:&str,output_path:&Path, bytes: Vec<u8>, origin_url: &str,conn: &Pool<MySql>) -> Option<()>
+async fn save_img(eid: &str, rating: i8, sha1: &str, output_path: &Path, bytes: Vec<u8>, origin_url: &str, conn: &Pool<MySql>) -> Option<()>
 {
-
     let mut file = File::create(output_path).ok()?;
     file.write_all(&bytes).ok()?;
 
