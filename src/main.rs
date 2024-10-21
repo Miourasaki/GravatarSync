@@ -69,8 +69,7 @@ async fn get_avatar(req: tide::Request<State>) -> tide::Result {
 
         if let Ok(data) = obj {
             if data.last_update < now.timestamp() - 60 * 60 * 24 {
-
-                sync_avatar(&data.eid, data.rating, data.sha1.clone(), &state.conn).await;
+                sync_avatar(&data.eid, data.rating, data.sha1.clone(), &state.resource_path,&state.conn).await;
             }
 
             let mut path = None;
@@ -85,7 +84,7 @@ async fn get_avatar(req: tide::Request<State>) -> tide::Result {
                 .execute(&state.conn)
                 .await
             {
-                if let Some(path) = sync_avatar(&eid, rating, None, &state.conn).await
+                if let Some(path) = sync_avatar(&eid, rating, None, &state.resource_path, &state.conn).await
                 { buffer = get_buffer(state.resource_path.to_owned() + &path); }
             }
         }
@@ -114,7 +113,7 @@ fn get_buffer(path: String) -> Option<Vec<u8>> {
 }
 
 
-async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>, conn: &Pool<MySql>) -> Option<String> {
+async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>, dir: &str, conn: &Pool<MySql>) -> Option<String> {
     println!("now, sync EMD5-{}-{} citizen avatar", eid, get_rating(rating));
     let _ = sqlx::query("UPDATE grsync_avatar SET last_update = ? WHERE eid = ? AND rating = ?")
         .bind(chrono::Utc::now().timestamp())
@@ -166,7 +165,7 @@ async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>, conn: &
     }
 
 
-    let path = format!("{:?}/{}.avif", env::var("RESOURCE_PATH"), sha1_hex);
+    let path = format!("{:?}/{}.avif", dir, sha1_hex);
     let output_path = Path::new(&path);
     let _ = save_img(eid, rating, &sha1_hex, &output_path, avif_bytes, &url, conn).await;
 
