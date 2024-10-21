@@ -165,7 +165,7 @@ async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>, dir: &s
     }
 
 
-    let path = format!("{:?}/{}.avif", dir, sha1_hex);
+    let path = format!("{}/{}.avif", dir, sha1_hex);
     let output_path = Path::new(&path);
     let _ = save_img(eid, rating, &sha1_hex, &output_path, avif_bytes, &url, conn).await;
 
