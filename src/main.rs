@@ -72,7 +72,7 @@ async fn get_avatar(req: tide::Request<State>) -> tide::Result {
 
     if let Ok(data) = obj {
         if data.last_update < now.timestamp() - 60 * 60 * 24 {
-            async_std::task::spawn(async {
+            async_std::task::spawn(async move {
                 sync_avatar(&data.eid, data.rating, data.sha1.clone(), &state.resource_path,&state.conn).await;
             });
         }
