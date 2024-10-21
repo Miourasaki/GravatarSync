@@ -66,7 +66,7 @@ async fn get_avatar(req: tide::Request<State>) -> tide::Result {
         .await;
 
     if let Ok(data) = obj {
-        if data.last_update < now.timestamp() - 6 { let _ = sync_avatar(&data.eid, data.rating, data.sha1.clone(), &state.resource_path,&state.conn).await; }
+        if data.last_update < now.timestamp() - 60 * 60 * 24 { let _ = sync_avatar(&data.eid, data.rating, data.sha1.clone(), &state.resource_path,&state.conn); }
 
         let mut path = None;
         if let Some(r) = data.resource { path = Some(r); }
