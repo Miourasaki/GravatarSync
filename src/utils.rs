@@ -18,16 +18,16 @@ pub fn is_hex_string(s: &str) -> bool {
 
 
 
-pub fn _get_rating_from_value(v:&str) -> i8 {
+pub fn _get_rating_from_value(_v:&str) -> i8 {
     for &(k, v) in RATING_MAP.iter() {
-        if v == v { return k; }
+        if _v == v { return k; }
     }
     0
 }
 
-pub fn get_rating(k:i8) -> &'static str {
+pub fn get_rating(_k:i8) -> &'static str {
     for &(k, v) in RATING_MAP.iter() {
-        if k == k { return v; }
+        if _k == k { return v; }
     }
     "g"
 }

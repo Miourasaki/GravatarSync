@@ -2,7 +2,7 @@ use std::{env};
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
-use image::{ImageFormat, ImageResult};
+use image::{ImageFormat};
 use sha1::{Sha1, Digest};
 use sqlx::{MySql, Pool};
 use utils::get_rating;
@@ -127,7 +127,7 @@ async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>,dir: &st
         .await.ok()?;
     let image_bytes= response.body_bytes().await.ok()?;
 
-    let img = image::load_from_memory(&image_bytes).ok()?
+    let img = image::load_from_memory(&image_bytes).ok()?;
 
     let mut avif_bytes = Vec::new();
     // 使用 Cursor
