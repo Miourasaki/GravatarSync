@@ -80,8 +80,9 @@ async fn get_avatar(req: tide::Request<State>) -> tide::Result {
         if let Some(p) = path
             { buffer = get_buffer(state.resource_path.to_owned() + &p); }
     } else {
-        if let Ok(_) = sqlx::query("INSERT INTO grsync_avatar(eid,rating) VALUE(?, 3)")
+        if let Ok(_) = sqlx::query("INSERT INTO grsync_avatar(eid,rating) VALUE(?, ?)")
             .bind(&eid)
+            .bind(rating)
             .execute(&state.conn)
             .await
         {
