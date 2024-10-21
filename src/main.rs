@@ -38,7 +38,7 @@ async fn main() -> tide::Result<()> {
 
     let mut app = tide::with_state(state);
 
-    app.at("/avatar/:md5").get(get_avatar);
+    app.at("/:md5").get(get_avatar);
     app.listen("127.0.0.1:9489").await?;
 
     Ok(())
@@ -121,24 +121,13 @@ async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>,dir: &st
 
     let client = surf::Client::new();
     let url = format!("https://gravatar.com/avatar/{}?r={}&s={}", eid, get_rating(rating), 512);
-    let response = client
+    let mut response = client
         .get(url.clone())
         .header("User-Agent", "grsync/0.1.0")
-        .await;
-    let image_bytes;
-    match response {
-        Ok(mut r) => {
-            image_bytes = r.body_bytes().await.ok()?;
-            println!("{:?}", r.header("Content-Type"));
-        },
-        Err(r) => { println!("{}",r);return None; }
-    }
+        .await.ok()?;
+    let image_bytes= response.body_bytes().await.ok()?;
 
-    let img;
-    match image::load_from_memory(&image_bytes) {
-        Ok(r) => img = r,
-        Err(e) => {println!("{}",e); return None;}
-    }
+    let img = image::load_from_memory(&image_bytes).ok()?
 
     let mut avif_bytes = Vec::new();
     // 使用 Cursor
@@ -177,7 +166,8 @@ async fn sync_avatar(eid: &str, rating: i8, origin_hash: Option<String>,dir: &st
     let path = format!("{}/{}.avif", dir,sha1_hex);
     let output_path = Path::new(&path);
     let _ = save_img(eid, rating, &sha1_hex, &output_path, avif_bytes, &url,conn).await;
-    None
+
+    Some(sha1_hex + ".avif")
 }
 
 
